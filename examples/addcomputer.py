@@ -70,6 +70,9 @@ class ADDCOMPUTER:
         self.__targetIp = cmdLineOptions.dc_ip
         self.__baseDN = cmdLineOptions.baseDN
         self.__computerGroup = cmdLineOptions.computer_group
+        self.__encryption = cmdLineOptions.encryption
+        self.__tgtOptions = cmdLineOptions.tgt_options
+        self.__tgsOptions = cmdLineOptions.tgs_options
 
         if self.__targetIp is not None:
             self.__kdcHost = self.__targetIp
@@ -148,7 +151,7 @@ class ADDCOMPUTER:
 
     def run_ldaps(self):
         try:
-            ldapServer, ldapConn = init_ldap_session(self.__domain, self.__username, self.__password, self.__lmhash, self.__nthash, self.__doKerberos, self.__targetIp, self.__target, self.__aesKey, True)
+            ldapServer, ldapConn = init_ldap_session(self.__domain, self.__username, self.__password, self.__lmhash, self.__nthash, self.__doKerberos, self.__targetIp, self.__target, self.__aesKey, True, self.__encryption, self.__tgtOptions, self.__tgsOptions)
 
             if self.__noAdd or self.__delete:
                 if not self.LDAPComputerExists(ldapConn, self.__computerName):
