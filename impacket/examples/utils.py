@@ -88,7 +88,7 @@ def _get_machine_name(machine, fqdn=False):
         return "%s.%s" % (s.getServerName(), s.getServerDNSDomainName())
     return s.getServerName()
 
-def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='', nthash='', aesKey='', kdcHost=None, TGT=None, TGS=None, useCache=True):
+def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='', nthash='', aesKey='', kdcHost=None, TGT=None, TGS=None, useCache=True, encType=None, tgtOptions=None, tgsOptions=None):
     from pyasn1.codec.ber import encoder, decoder
     from pyasn1.type.univ import noValue
     """
@@ -120,7 +120,7 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
     # Importing down here so pyasn1 is not required if kerberos is not used.
     from impacket.krb5.ccache import CCache
     from impacket.krb5.asn1 import AP_REQ, Authenticator, TGS_REP, seq_set
-    from impacket.krb5.kerberosv5 import getKerberosTGT, getKerberosTGS
+    from impacket.krb5.kerberosv5 import getKerberosTGT, getKerberosTGS, parseKerberosOptions
     from impacket.krb5 import constants
     from impacket.krb5.types import Principal, KerberosTime, Ticket
     import datetime
@@ -136,7 +136,7 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
     userName = Principal(user, type=constants.PrincipalNameType.NT_PRINCIPAL.value)
     if TGT is None:
         if TGS is None:
-            tgt, cipher, oldSessionKey, sessionKey = getKerberosTGT(userName, password, domain, lmhash, nthash, aesKey, kdcHost)
+            tgt, cipher, oldSessionKey, sessionKey = getKerberosTGT(userName, password, domain, lmhash, nthash, aesKey, kdcHost, encType=encType, options=parseKerberosOptions(tgtOptions))
     else:
         tgt = TGT['KDC_REP']
         cipher = TGT['cipher']
@@ -144,7 +144,7 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
 
     if TGS is None:
         serverName = Principal(target, type=constants.PrincipalNameType.NT_SRV_INST.value)
-        tgs, cipher, oldSessionKey, sessionKey = getKerberosTGS(serverName, domain, kdcHost, tgt, cipher, sessionKey)
+        tgs, cipher, oldSessionKey, sessionKey = getKerberosTGS(serverName, domain, kdcHost, tgt, cipher, sessionKey, encType=encType, options=parseKerberosOptions(tgsOptions))
     else:
         tgs = TGS['KDC_REP']
         cipher = TGS['cipher']
@@ -210,7 +210,7 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
 
     return True
 
-def _init_ldap_connection(target, use_ssl, domain, username, password, lmhash, nthash, k, dc_ip, aesKey):
+def _init_ldap_connection(target, use_ssl, domain, username, password, lmhash, nthash, k, dc_ip, aesKey, encType=None, tgtOptions=None, tgsOptions=None):
     user = '%s\\%s' % (domain, username)
     connect_to = target
     if dc_ip is not None:
@@ -222,7 +222,7 @@ def _init_ldap_connection(target, use_ssl, domain, username, password, lmhash, n
     if k:
         ldap_session = ldap3.Connection(ldap_server)
         ldap_session.bind()
-        ldap3_kerberos_login(ldap_session, target, username, password, domain, lmhash, nthash, aesKey, kdcHost=dc_ip)
+        ldap3_kerberos_login(ldap_session, target, username, password, domain, lmhash, nthash, aesKey, kdcHost=dc_ip, encType, tgtOptions, tgsOptions)
     elif lmhash == '' and nthash == '':
         ldap_session = ldap3.Connection(ldap_server, user=user, password=password, authentication=ldap3.NTLM, auto_bind=True)
     else:
@@ -230,7 +230,7 @@ def _init_ldap_connection(target, use_ssl, domain, username, password, lmhash, n
 
     return ldap_server, ldap_session
 
-def init_ldap_session(domain, username, password, lmhash, nthash, k, dc_ip, dc_host, aesKey, use_ldaps):
+def init_ldap_session(domain, username, password, lmhash, nthash, k, dc_ip, dc_host, aesKey, use_ldaps, encType=None, tgtOptions=None, tgsOptions=None):
     if k:
         if dc_host is not None:
             target = dc_host
@@ -244,7 +244,7 @@ def init_ldap_session(domain, username, password, lmhash, nthash, k, dc_ip, dc_h
         else:
             target = domain
 
-    return _init_ldap_connection(target, use_ldaps, domain, username, password, lmhash, nthash, k, dc_ip, aesKey)
+    return _init_ldap_connection(target, use_ldaps, domain, username, password, lmhash, nthash, k, dc_ip, aesKey, encType, tgtOptions, tgsOptions)
 
 # ----------
 
