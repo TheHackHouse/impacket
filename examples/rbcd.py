@@ -290,6 +290,12 @@ def parse_args():
                             'the identity parameter')
     group.add_argument('-dc-host', action='store', metavar="hostname", help='Hostname of the domain controller or KDC (Key Distribution Center) for Kerberos. If omitted, -dc-ip will be used')
 
+    kerberos_options = parser.add_argument_group('kerberos options')
+
+    kerberos_options.add_argument('-tgs-options', action="store", metavar="hex value", default=None, help='The hexadecimal value to send to the Kerberos Ticket Granting Service (TGS).')
+    kerberos_options.add_argument('-tgt-options', action="store", metavar="hex value", default=None, help='The hexadecimal value to send to the Kerberos Ticket Granting Ticket (TGT).')
+    kerberos_options.add_argument('-encryption', action="store", metavar="18 or 23", default="23", help='Set encryption to AES256 (18) or RC4 (23).')
+
     if len(sys.argv) == 1:
         parser.print_help()
         sys.exit(1)
@@ -311,7 +317,7 @@ def main():
     try:
         base_dn = ','.join('dc=%s' % part for part in domain.split('.'))
         target = args.dc_host if args.dc_host is not None else domain
-        ldap_session = ldap_login(target, base_dn, args.dc_ip, args.dc_host, args.k, username, password, domain, lmhash, nthash, args.aesKey, ldaps_flag=args.use_ldaps)
+        ldap_session = ldap_login(target, base_dn, args.dc_ip, args.dc_host, args.k, username, password, domain, lmhash, nthash, args.aesKey, ldaps_flag=args.use_ldaps, encType=args.encryption, tgtOptions=args.tgt_options, tgsOptions=args.tgs_options)
         rbcd = RBCD(ldap_session, base_dn, args.delegate_to)
         if args.action == 'read':
             rbcd.read()

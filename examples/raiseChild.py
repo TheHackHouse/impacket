@@ -84,7 +84,7 @@ except ImportError:
 from impacket import version
 from impacket.krb5.types import Principal, KerberosTime
 from impacket.krb5 import constants
-from impacket.krb5.kerberosv5 import getKerberosTGT, getKerberosTGS, KerberosError
+from impacket.krb5.kerberosv5 import getKerberosTGT, getKerberosTGS, KerberosError, parseKerberosOptions
 from impacket.krb5.asn1 import AS_REP, AuthorizationData, AD_IF_RELEVANT, EncTicketPart
 from impacket.krb5.crypto import _enctype_table, get_kerberos_key_for_enctype, get_matching_aes_key
 from impacket.dcerpc.v5.ndr import NDRULONG
@@ -487,6 +487,10 @@ class RAISECHILD:
         #else:
         #    self.__kdcHost = domain
         self.__kdcHost = None
+
+        self.__encryption = options.encryption
+        self.__tgtOptions = parseKerberosOptions(options.tgt_options)
+        self.__tgsOptions = parseKerberosOptions(options.tgs_options)
 
         if options.hashes is not None:
             lmhash, nthash = options.hashes.split(':')
@@ -1117,7 +1121,7 @@ class RAISECHILD:
                 logging.info('Trying %s for TGT request' % credType)
                 tgt, cipher, oldSessionKey, sessionKey = getKerberosTGT(userName, childCreds['password'],
                                                                         childCreds['domain'], cred['lmhash'],
-                                                                        cred['nthash'], cred['aesKey'], self.__kdcHost)
+                                                                        cred['nthash'], cred['aesKey'], self.__kdcHost, encType=self.__encryption, options=self.__tgtOptions)
                 logging.info('TGT obtained using %s' % credType)
             except KerberosError as e:
                 if e.getErrorCode() in (constants.ErrorCodes.KDC_ERR_ETYPE_NOSUPP.value,
@@ -1151,7 +1155,7 @@ class RAISECHILD:
                 tgsCIFS, cipherCIFS, oldSessionKeyCIFS, sessionKeyCIFS = getKerberosTGS(serverName,
                                                                                         childCreds['domain'], self.__kdcHost,
                                                                                         goldenTicket, goldenCipher,
-                                                                                        goldenSessionKey)
+                                                                                        goldenSessionKey, encType=self.__encryption, options=self.__tgsOptions)
                 TGT['cipher'] = goldenCipher
                 TGT['sessionKey'] = goldenSessionKey
                 TGS['KDC_REP'] = tgsCIFS
@@ -1258,6 +1262,12 @@ if __name__ == '__main__':
                        'ones specified in the command line')
     group.add_argument('-aesKey', action="store", metavar = "hex key", help='AES key to use for Kerberos Authentication '
                                                                             '(128 or 256 bits)')
+
+    kerberos_options = parser.add_argument_group('kerberos options')
+
+    kerberos_options.add_argument('-tgs-options', action="store", metavar="hex value", default=None, help='The hexadecimal value to send to the Kerberos Ticket Granting Service (TGS).')
+    kerberos_options.add_argument('-tgt-options', action="store", metavar="hex value", default=None, help='The hexadecimal value to send to the Kerberos Ticket Granting Ticket (TGT).')
+    kerberos_options.add_argument('-encryption', action="store", metavar="18 or 23", default="23", help='Set encryption to AES256 (18) or RC4 (23).')
 
     if len(sys.argv)==1:
         parser.print_help()
