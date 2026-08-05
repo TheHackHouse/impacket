@@ -95,8 +95,8 @@ class GETST:
         self.__dmsa = options.dmsa
         self.__saveFileName = None
         self.__no_s4u2proxy = options.no_s4u2proxy
-        self.__tgsOptions = parseKerberosOptions(options.tgt_options)
-        self.__tgtOptions = parseKerberosOptions(options.tgs_options)
+        self.__tgtOptions = parseKerberosOptions(options.tgt_options)
+        self.__tgsOptions = parseKerberosOptions(options.tgs_options)
         self.__encryption = options.encryption
 
         if options.hashes is not None:
