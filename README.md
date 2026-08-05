@@ -46,6 +46,24 @@ The extra options added are found under the `SOCKS Proxy Options` category in th
  * smbexec.py
  * wmiexec.py
 
+---
+
+Krbrelayx Branch
+----------------
+
+This branch merges the tools from [krbrelayx](https://github.com/dirkjanm/krbrelayx) into the examples folder (including the necessary library files).
+
+**Added Examples:**
+
+ * addspn.py
+ * dnstool.py
+ * printerbug.py
+ * krbrelayx.py
+
+**Added Libraries:**
+
+ * krbrelayx (folder)
+
 Original README
 ---
 
