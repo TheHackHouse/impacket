@@ -29,7 +29,7 @@ from binascii import unhexlify
 from impacket import version
 from impacket.examples import logger
 from impacket.examples.utils import parse_identity
-from impacket.krb5.kerberosv5 import getKerberosTGT
+from impacket.krb5.kerberosv5 import getKerberosTGT, parseKerberosOptions
 from impacket.krb5 import constants
 from impacket.krb5.types import Principal
 
@@ -45,6 +45,9 @@ class GETTGT:
         self.__options = options
         self.__kdcHost = options.dc_ip
         self.__service = options.service
+        self.__encryption = options.encryption
+        self.__tgtOptions = parseKerberosOptions(options.tgt_options)
+
         if options.hashes is not None:
             self.__lmhash, self.__nthash = options.hashes.split(':')
 
@@ -65,7 +68,7 @@ class GETTGT:
                                                                 nthash = unhexlify(self.__nthash),
                                                                 aesKey = self.__aesKey,
                                                                 kdcHost = self.__kdcHost,
-                                                                serverName = self.__service)
+                                                                serverName = self.__service, encType=self.__encryption, options=self.__tgtOptions)
         self.saveTicket(tgt,oldSessionKey)
 
 if __name__ == '__main__':
@@ -96,6 +99,12 @@ if __name__ == '__main__':
                         help='Use a SOCKS proxy for the connection')
     group.add_argument('-socks-address', default='127.0.0.1', help='SOCKS5 server address')
     group.add_argument('-socks-port', default=1080, type=int, help='SOCKS5 server port')
+
+    kerberos_options = parser.add_argument_group('kerberos options')
+
+    kerberos_options.add_argument('-tgs-options', action="store", metavar="hex value", default=None, help='The hexadecimal value to send to the Kerberos Ticket Granting Service (TGS).')
+    kerberos_options.add_argument('-tgt-options', action="store", metavar="hex value", default=None, help='The hexadecimal value to send to the Kerberos Ticket Granting Ticket (TGT).')
+    kerberos_options.add_argument('-encryption', action="store", metavar="18 or 23", default="23", help='Set encryption to AES256 (18) or RC4 (23).')
 
     if len(sys.argv)==1:
         parser.print_help()

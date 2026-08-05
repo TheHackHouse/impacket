@@ -204,7 +204,7 @@ class LDAPConnection:
         self._socket.settimeout(None)
 
     def kerberosLogin(self, user, password, domain='', lmhash='', nthash='', aesKey='', kdcHost=None, TGT=None,
-                      TGS=None, useCache=True):
+                      TGS=None, useCache=True, encType=None, tgtOptions=None, tgsOptions=None):
         """
         logins into the target system explicitly using Kerberos. Hashes are used if RC4_HMAC is supported.
 
@@ -218,6 +218,9 @@ class LDAPConnection:
         :param struct TGT: If there's a TGT available, send the structure here and it will be used
         :param struct TGS: same for TGS. See smb3.py for the format
         :param bool useCache: whether or not we should use the ccache for credentials lookup. If TGT or TGS are specified this is False
+        :param string encType: encryption type to request for the Kerberos exchange, AES256 (18) or RC4 (23). If None, the default is used
+        :param string tgtOptions: hexadecimal string of KDC options to set on the TGT request (e.g. forwardable, renewable). If None, no extra options are set
+        :param string tgsOptions: hexadecimal string of KDC options to set on the TGS request. If None, no extra options are set
 
         :return: True, raises a LDAPSessionError if error.
         """
@@ -237,7 +240,7 @@ class LDAPConnection:
         from impacket.krb5.ccache import CCache
         from impacket.krb5.gssapi import GSSAPI, GSS_C_CONF_FLAG, GSS_C_INTEG_FLAG, GSS_C_SEQUENCE_FLAG, GSS_C_REPLAY_FLAG
         from impacket.krb5.asn1 import AP_REQ, Authenticator, TGS_REP, seq_set
-        from impacket.krb5.kerberosv5 import getKerberosTGT, getKerberosTGS, CheckSumField
+        from impacket.krb5.kerberosv5 import getKerberosTGT, getKerberosTGS, CheckSumField, parseKerberosOptions
         from impacket.krb5 import constants
         from impacket.krb5.types import Principal, KerberosTime, Ticket
         import datetime
@@ -254,7 +257,7 @@ class LDAPConnection:
         if TGT is None:
             if TGS is None:
                 tgt, cipher, oldSessionKey, sessionKey = getKerberosTGT(userName, password, domain, lmhash, nthash,
-                                                                        aesKey, kdcHost)
+                                                                        aesKey, kdcHost, encType=encType, options=parseKerberosOptions(tgtOptions))
         else:
             tgt = TGT['KDC_REP']
             cipher = TGT['cipher']
@@ -263,7 +266,7 @@ class LDAPConnection:
         if TGS is None:
             serverName = Principal(targetName, type=constants.PrincipalNameType.NT_SRV_INST.value)
             tgs, cipher, oldSessionKey, sessionKey = getKerberosTGS(serverName, domain, kdcHost, tgt, cipher,
-                                                                    sessionKey)
+                                                                    sessionKey, encType=encType, options=parseKerberosOptions(tgsOptions))
         else:
             tgs = TGS['KDC_REP']
             cipher = TGS['cipher']
