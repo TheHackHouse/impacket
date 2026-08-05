@@ -21,6 +21,31 @@ impacket-exe-installer.ps1 --help
 
 > Use Ctrl+Pause/Break to exit scripts.
 
+---
+
+Socks Branch
+-----------------------
+
+This branch adds native socks proxy functionality for some examples.
+This is done to eliminate the need for an extra tool like
+[proxychains](https://github.com/haad/proxychains).
+
+The extra options added are found under the `SOCKS Proxy Options` category in the help menu:
+
+ * socks (enables socks)
+ * socks-address
+ * socks-port
+
+**Examples updated:**
+
+ * atexec.py
+ * dcomexec.py
+ * mssqlclient.py
+ * psexec.py
+ * secretsdump.py
+ * smbexec.py
+ * wmiexec.py
+
 Original README
 ---
 
