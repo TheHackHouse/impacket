@@ -222,7 +222,7 @@ def _init_ldap_connection(target, use_ssl, domain, username, password, lmhash, n
     if k:
         ldap_session = ldap3.Connection(ldap_server)
         ldap_session.bind()
-        ldap3_kerberos_login(ldap_session, target, username, password, domain, lmhash, nthash, aesKey, kdcHost=dc_ip, encType, tgtOptions, tgsOptions)
+        ldap3_kerberos_login(ldap_session, target, username, password, domain, lmhash, nthash, aesKey, kdcHost=dc_ip, encType=encType, tgtOptions=tgtOptions, tgsOptions=tgsOptions)
     elif lmhash == '' and nthash == '':
         ldap_session = ldap3.Connection(ldap_server, user=user, password=password, authentication=ldap3.NTLM, auto_bind=True)
     else:
