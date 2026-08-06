@@ -1,0 +1,59 @@
+# GitHub Action workflow to build Windows binaries for every Impacket example
+# tool and publish them as a prerelease on every push.
+#
+
+name: Build Windows release binaries
+
+on:
+  push:
+    branches: [windows-cicd]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Windows binaries
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Impacket
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Build binaries
+        shell: pwsh
+        run: |
+          .\.github\scripts\build-windows-binaries.ps1 -SourceDir "${{ github.workspace }}" -OutputDir "${{ github.workspace }}\dist-bin"
+
+      # if: always() so a partial build (some tools failed) still publishes whatever did succeed
+      - name: Create prerelease and upload binaries
+        if: always()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $shortSha = "${{ github.sha }}".Substring(0, 7)
+          $tag = "windows-cicd-build-$shortSha"
+
+          $exeFiles = Get-ChildItem -Path "${{ github.workspace }}\dist-bin" -Filter '*.exe' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+          if (-not $exeFiles) {
+              Write-Warning 'No binaries were produced, nothing to release.'
+              exit 1
+          }
+
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+              gh release create $tag `
+                  --title "Windows binaries ($shortSha)" `
+                  --notes "Automated build from commit ${{ github.sha }} on ${{ github.ref_name }}." `
+                  --prerelease `
+                  --target "${{ github.sha }}"
+          }
+
+          gh release upload $tag $exeFiles --clobber
