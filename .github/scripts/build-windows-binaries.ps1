@@ -164,10 +164,9 @@ foreach ($tool in $tools) {
         if ($toolExtras.ContainsKey($tool)) {
             $extra = $toolExtras[$tool]
 
-            foreach ($package in $extra['Packages']) {
-                Invoke-Native python -m pip install $package
-            }
-
+            # Must run before the Packages loop below: pcapy-ng's setup.py reads $env:WPDPACK_BASE
+            # (set by Install-Npcap) at compile time, so installing it before this ran would fall
+            # back to pcapy-ng's hardcoded (nonexistent) c:\wpdpack path and fail to find pcap.h.
             if ($extra.ContainsKey('NeedsNpcap') -and $extra['NeedsNpcap']) {
                 Install-VCBuildTools -TempDir $TempDir
                 if (-not $npcapInstallerPath) {
@@ -176,6 +175,10 @@ foreach ($tool in $tools) {
 
                 $pyInstallerArgs.Add('--add-binary')
                 $pyInstallerArgs.Add("$npcapInstallerPath;.")
+            }
+
+            foreach ($package in $extra['Packages']) {
+                Invoke-Native python -m pip install $package
             }
 
             if ($extra.ContainsKey('ExtraPyInstallerArgs')) {
