@@ -1,12 +1,12 @@
 # GitHub Action workflow to build Windows binaries for every Impacket example
-# tool and attach them to a release when one is created.
+# tool and publish them as a prerelease on every push.
 #
 
 name: Build Windows release binaries
 
 on:
-  release:
-    types: [created]
+  push:
+    branches: [windows-cicd]
   workflow_dispatch: {}
 
 permissions:
@@ -31,19 +31,29 @@ jobs:
         run: |
           .\.github\scripts\build-windows-binaries.ps1 -SourceDir "${{ github.workspace }}" -OutputDir "${{ github.workspace }}\dist-bin"
 
-      # Always available, even for a manual (workflow_dispatch) test run that has no release to attach to
-      - name: Upload binaries as workflow artifact
+      # if: always() so a partial build (some tools failed) still publishes whatever did succeed
+      - name: Create prerelease and upload binaries
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: impacket-windows-binaries
-          path: ${{ github.workspace }}\dist-bin\*.exe
-
-      - name: Upload binaries to release
-        if: always() && github.event_name == 'release'
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $exeFiles = Get-ChildItem -Path "${{ github.workspace }}\dist-bin" -Filter '*.exe' | Select-Object -ExpandProperty FullName
-          gh release upload "${{ github.event.release.tag_name }}" $exeFiles --clobber
+          $shortSha = "${{ github.sha }}".Substring(0, 7)
+          $tag = "windows-cicd-build-$shortSha"
+
+          $exeFiles = Get-ChildItem -Path "${{ github.workspace }}\dist-bin" -Filter '*.exe' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+          if (-not $exeFiles) {
+              Write-Warning 'No binaries were produced, nothing to release.'
+              exit 1
+          }
+
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+              gh release create $tag `
+                  --title "Windows binaries ($shortSha)" `
+                  --notes "Automated build from commit ${{ github.sha }} on ${{ github.ref_name }}." `
+                  --prerelease `
+                  --target "${{ github.sha }}"
+          }
+
+          gh release upload $tag $exeFiles --clobber
