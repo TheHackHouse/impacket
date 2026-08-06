@@ -6,7 +6,7 @@ name: Build Windows release binaries
 
 on:
   push:
-    branches: [windows-cicd]
+    branches: [windows-all-features]
   workflow_dispatch: {}
 
 permissions:
@@ -39,7 +39,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $shortSha = "${{ github.sha }}".Substring(0, 7)
-          $tag = "windows-cicd-build-$shortSha"
+          $tag = "${{ github.ref_name }}-build-$shortSha"
 
           $exeFiles = Get-ChildItem -Path "${{ github.workspace }}\dist-bin" -Filter '*.exe' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
           if (-not $exeFiles) {
