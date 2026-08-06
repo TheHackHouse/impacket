@@ -52,6 +52,30 @@ $toolExtras = @{
     }
 }
 
+# npcap.com and aka.ms are third-party hosts without GitHub's reliability -- a single
+# connection timeout there shouldn't take down an otherwise-successful tool.
+function Invoke-WebRequestWithRetry {
+    param (
+        [string]$Uri,
+        [string]$OutFile,
+        [int]$MaxAttempts = 3
+    )
+
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        try {
+            Invoke-WebRequest -Uri $Uri -OutFile $OutFile
+            return
+        }
+        catch {
+            if ($attempt -eq $MaxAttempts) {
+                throw
+            }
+            Write-Warning "Download of $Uri failed (attempt $attempt/$MaxAttempts): $_. Retrying..."
+            Start-Sleep -Seconds (5 * $attempt)
+        }
+    }
+}
+
 function Test-VCToolsAvailable {
     $vswherePath = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe'
     if (-not (Test-Path $vswherePath)) {
@@ -72,7 +96,7 @@ function Install-VCBuildTools {
 
     Write-Host 'Installing VC++ Build Tools...'
     $installer = Join-Path -Path $TempDir -ChildPath 'vs_buildtools.exe'
-    Invoke-WebRequest -Uri $vsBuildToolsUrl -OutFile $installer
+    Invoke-WebRequestWithRetry -Uri $vsBuildToolsUrl -OutFile $installer
     Start-Process -FilePath $installer -ArgumentList '--quiet', '--wait', '--add', 'Microsoft.VisualStudio.Workload.VCTools;includeRecommended' -Wait
 }
 
@@ -103,7 +127,7 @@ function Install-Npcap {
     if (-not (Test-Path -Path $sdkFolder)) {
         Write-Host 'Downloading Npcap SDK...'
         $sdkArchive = Join-Path -Path $TempDir -ChildPath 'npcap-sdk.zip'
-        Invoke-WebRequest -Uri $npcapSDKUrl -OutFile $sdkArchive
+        Invoke-WebRequestWithRetry -Uri $npcapSDKUrl -OutFile $sdkArchive
         Expand-Archive -Path $sdkArchive -DestinationPath $sdkFolder -Force
     }
 
@@ -115,7 +139,7 @@ function Install-Npcap {
     $npcapInstallerPath = Join-Path -Path $TempDir -ChildPath 'npcap.exe'
     if (-not (Test-Path -Path $npcapInstallerPath)) {
         Write-Host 'Downloading Npcap installer...'
-        Invoke-WebRequest -Uri $npcapUrl -OutFile $npcapInstallerPath
+        Invoke-WebRequestWithRetry -Uri $npcapUrl -OutFile $npcapInstallerPath
     }
 
     return $npcapInstallerPath

@@ -130,15 +130,24 @@ $availableTools = @(
     'GetNPUsers'
     'GetUserSPNs'
     'addcomputer'
+    'addspn'
     'atexec'
+    'attrib'
+    'badsuccessor'
     'changepasswd'
+    'CheckLDAPStatus'
+    'checkMSSQLStatus'
     'dacledit'
     'dcomexec'
     'describeTicket'
+    'dnstool'
     'dpapi'
+    'dpapidump'
     'esentutl'
     'exchanger'
+    'filetime'
     'findDelegation'
+    'GenerateKerberosOptions'
     'getArch'
     'getPac'
     'getST'
@@ -147,6 +156,7 @@ $availableTools = @(
     'karmaSMB'
     'keylistattack'
     'kintercept'
+    'krbrelayx'
     'lookupsid'
     'machine_role'
     'mimikatz'
@@ -160,15 +170,18 @@ $availableTools = @(
     'owneredit'
     'ping'
     'ping6'
+    'printerbug'
     'psexec'
     'raiseChild'
     'rbcd'
     'rdp_check'
     'reg'
     'registry-read'
+    'regsecrets'
     'rpcdump'
     'rpcmap'
     'sambaPipe'
+    'samedit'
     'samrdump'
     'secretsdump'
     'services'
@@ -207,7 +220,26 @@ $modules = @{
                 [Hashtable]$Flags
             )
         }
-    }   
+    }
+    'krbrelayx'  = @{
+        'install' = {
+            param (
+                [Hashtable]$Arguments,
+                [Hashtable]$Flags
+            )
+
+            # krbrelayx reuses ntlmrelayx's PROTOCOL_ATTACKS plugin loading, and dynamically
+            # loads its own client plugins via pkg_resources, so both packages need collecting
+
+            return @('--collect-all', 'impacket.examples.krbrelayx')
+        }
+        'cleanup' = {
+            param (
+                [Hashtable]$Arguments,
+                [Hashtable]$Flags
+            )
+        }
+    }
     'npcap'      = @{
         'install' = {
             param (
@@ -309,6 +341,10 @@ $toolExtras = @{
     'ntlmrelayx' = @{
         Modules  = @('ntlmrelayx')
         Packages = @('pydivert')
+    }
+    'krbrelayx'  = @{
+        Modules  = @('ntlmrelayx', 'krbrelayx')
+        Packages = @()
     }
     'sniff'      = @{
         Modules  = @('npcap')
