@@ -142,9 +142,12 @@ Set-Location -Path $SourceDir
 Invoke-Native python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 
-Invoke-Native pip install --upgrade pip
-Invoke-Native pip install -r requirements.txt
-Invoke-Native pip install pyinstaller
+# pip.exe can't overwrite itself while running on Windows ("To modify pip, please run
+# python.exe -m pip install --upgrade pip"), so use `python -m pip` everywhere, which
+# is also just the generally-recommended way to invoke pip.
+Invoke-Native python -m pip install --upgrade pip
+Invoke-Native python -m pip install -r requirements.txt
+Invoke-Native python -m pip install pyinstaller
 Invoke-Native python setup.py install
 
 $npcapInstallerPath = $null
@@ -162,7 +165,7 @@ foreach ($tool in $tools) {
             $extra = $toolExtras[$tool]
 
             foreach ($package in $extra['Packages']) {
-                Invoke-Native pip install $package
+                Invoke-Native python -m pip install $package
             }
 
             if ($extra.ContainsKey('NeedsNpcap') -and $extra['NeedsNpcap']) {
