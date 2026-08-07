@@ -362,11 +362,17 @@ function install {
         [Hashtable]$Flags
     )
 
+    # Save for later to return back to the start, this has to happen outside the try so that
+    # cleanup can still restore it if we fail early
+    $startingDirectory = Get-Location
+
     try {
 
         # With the way lists are parsed, this has to be done at runtime
         if ($arguments['tools'] -contains 'all') {
-            $arguments['tools'] = $availableTools
+            # 'all' is itself in the list of available tools, so it has to be filtered back out
+            # or we would try to build a non existent examples\all.py
+            $arguments['tools'] = $availableTools | Where-Object { $_ -ne 'all' }
         }
 
         # Create a folder in the specified temp dir, this will be used as the place where everything is downloaded and built in
@@ -380,14 +386,10 @@ function install {
     
         New-Item -Path $tempDir -ItemType 'Directory' -Force | Out-Null
 
-        # Save for later to return back to the start
-        $startingDirectory = Get-Location
-
-        $targetDirectory
-
         # Check if the source is a local directory, else download from the source url
         if ($arguments['source'].IsFile) {
-            $targetDirectory = $arguments['source'].AbsolutePath
+            # LocalPath rather than AbsolutePath, the latter percent encodes spaces in the path
+            $targetDirectory = $arguments['source'].LocalPath
             $virtualEnvironmentPath = Join-Path -Path $targetDirectory -ChildPath '.venv'
             if (Test-Path -Path $virtualEnvironmentPath) {
                 Remove-Item -Path $virtualEnvironmentPath -Recurse -Force
@@ -413,7 +415,14 @@ function install {
 
         # Create and activate a Python virtual environment
         & $pythonBinary -m venv .venv
-        .\.venv\Scripts\Activate.ps1
+
+        $activateScript = Join-Path -Path $targetDirectory -ChildPath '.venv\Scripts\Activate.ps1'
+        if (-not (Test-Path -Path $activateScript)) {
+            throw "Failed to create the virtual environment, `"$activateScript`" does not exist."
+        }
+
+        # Dot sourced so the activation applies to this scope
+        . $activateScript
 
         # Install the requiements and Pyinstaller
         pip install -r requirements.txt
@@ -507,7 +516,10 @@ function install {
         }
 
         # Deactivate the Python virtual environment and reset our working directory
-        deactivate
+        # The environment may never have been activated if we failed before that point
+        if (Get-Command 'deactivate' -ErrorAction 'SilentlyContinue') {
+            deactivate
+        }
         Set-Location -Path $startingDirectory
 
         # Remove our Python install
@@ -535,6 +547,41 @@ function list-tools {
     Write-Host ''
 }
 
+function Test-PythonBinary {
+    param (
+        [string]$Path,
+        [version]$MinimumVersion
+    )
+
+    # Returns the version of a Python binary, or $null if it is missing/unusable.
+    # This also filters out the Windows Store "python.exe" alias stub, which exists on the
+    # PATH but prints nothing and exits non-zero.
+
+    if (-not (Test-Path -Path $Path)) {
+        return $null
+    }
+
+    try {
+        $versionOutput = & $Path --version
+    }
+    catch {
+        return $null
+    }
+
+    if ($LASTEXITCODE -ne 0) {
+        return $null
+    }
+
+    if ("$versionOutput" -match 'Python\s+(\d+\.\d+(\.\d+)?)') {
+        $foundVersion = [version]$Matches[1]
+        if ($foundVersion -ge $MinimumVersion) {
+            return $foundVersion
+        }
+    }
+
+    return $null
+}
+
 function Get-Python {
     param (
         [string]$TempDir
@@ -543,14 +590,22 @@ function Get-Python {
     $pythonVersion = '3.13.2'
     $pythonUrl = "https://www.python.org/ftp/python/$pythonVersion/python-$pythonVersion-amd64.exe"
 
-    # Check if Python is already installed, and if the version matches
-    $pythonOutput = python --version
-    if ($pythonOutput -eq "python $pythonVersion") {
-        return (Get-Command python).Source
+    # Any Python new enough to build the project is fine, it does not have to be the exact
+    # version we would otherwise download
+    $minimumPythonVersion = [version]'3.10'
+
+    # Check if a usable Python is already installed, if so we can skip the download entirely
+    $existingPython = Get-Command 'python' -CommandType 'Application' -ErrorAction 'SilentlyContinue' | Select-Object -First 1
+    if ($existingPython) {
+        $existingVersion = Test-PythonBinary -Path $existingPython.Source -MinimumVersion $minimumPythonVersion
+        if ($existingVersion) {
+            Write-Host "Using existing Python $existingVersion ($($existingPython.Source))"
+            return $existingPython.Source
+        }
     }
 
     # Python needs to be downloaded, do that, and then return the path to the binary since we are not adding it to the PATH
-    Write-Host 'Downloading Python...'
+    Write-Host "Downloading Python $pythonVersion..."
 
     $ProgressPreference = 'SilentlyContinue'
     $pythonDirectory = Join-Path -Path $TempDir -ChildPath 'python'
@@ -558,15 +613,64 @@ function Get-Python {
     if (Test-Path -Path $pythonDirectory) {
         Remove-Item $pythonDirectory -Recurse -Force
     }
-    
-    New-Item -Path $pythonDirectory -ItemType 'Directory' | Out-Null
+
+    New-Item -Path $pythonDirectory -ItemType 'Directory' -Force | Out-Null
     $pythonInstallerPath = Join-Path -Path $pythonDirectory -ChildPath 'python-installer.exe'
+    $pythonInstallerLog = Join-Path -Path $TempDir -ChildPath 'python-install.log'
 
     Invoke-WebRequest -Uri $pythonUrl -Outfile $pythonInstallerPath
-    Start-Process $pythonInstallerPath -ArgumentList '/quiet', "TargetDir=$($pythonDirectory -replace ' ', '` ')", 'Shortcuts=0', 'Include_doc=0', 'Include_launcher=0' -Wait -Verb RunAs
+
+    Write-Host 'Installing Python...'
+
+    # InstallAllUsers=0 keeps this a per-user install into our temp TargetDir, which needs no
+    # elevation. That matters: when the bundle elevates it relaunches itself as a *new* process
+    # and the one we are waiting on exits immediately, so -Wait would return before the install
+    # had actually happened.
+    $pythonInstallerArgs = @(
+        '/quiet'
+        '/log', "`"$pythonInstallerLog`""
+        "TargetDir=`"$pythonDirectory`""
+        'InstallAllUsers=0'
+        'InstallLauncherAllUsers=0'
+        'Include_launcher=0'
+        'Include_doc=0'
+        'Include_test=0'
+        'Include_tcltk=0'
+        'AssociateFiles=0'
+        'Shortcuts=0'
+        'PrependPath=0'
+    )
+
+    $installerProcess = Start-Process $pythonInstallerPath -ArgumentList $pythonInstallerArgs -Wait -PassThru
+
+    # The bundle can still hand off to child processes, so wait for those to drain as well
+    Get-Process -Name 'python-installer' -ErrorAction 'SilentlyContinue' | Wait-Process -Timeout 900 -ErrorAction 'SilentlyContinue'
 
     $pythonBinary = Join-Path -Path $pythonDirectory -ChildPath 'python.exe'
-    return $pythonBinary
+
+    # Do not hand back a path until the binary actually exists and runs, otherwise every later
+    # step fails with a confusing "not recognized as the name of a cmdlet" error
+    $waitTimer = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($waitTimer.Elapsed.TotalMinutes -lt 15) {
+        if (Test-PythonBinary -Path $pythonBinary -MinimumVersion $minimumPythonVersion) {
+            Write-Host "Installed Python to $pythonDirectory"
+            return $pythonBinary
+        }
+        Start-Sleep -Seconds 2
+    }
+
+    $failureMessage = "Python installation failed, `"$pythonBinary`" is missing or unusable."
+    if ($installerProcess -and $installerProcess.ExitCode -ne 0) {
+        $failureMessage += " Installer exit code: $($installerProcess.ExitCode)."
+    }
+    if (Test-Path -Path $pythonInstallerLog) {
+        # The log lives in the temp dir, which gets deleted during cleanup, so keep a copy
+        $savedLog = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath 'impacket-python-install.log'
+        Copy-Item -Path $pythonInstallerLog -Destination $savedLog -Force -ErrorAction 'SilentlyContinue'
+        $failureMessage += " See the installer log at `"$savedLog`"."
+    }
+
+    throw $failureMessage
 }
 
 function Remove-Python {
@@ -579,7 +683,11 @@ function Remove-Python {
 
     # Check if the Python installer is still around, if so, uninstall, this should only happen if we did not find an existing install
     if (Test-Path $pythonInstallerPath) {
-        Start-Process $pythonInstallerPath -ArgumentList '/quiet', 'uninstall' -Wait -Verb RunAs
+        Write-Host 'Uninstalling Python...'
+        Start-Process $pythonInstallerPath -ArgumentList '/quiet', '/uninstall' -Wait
+
+        # Same relaunch caveat as the install, make sure nothing is still holding the temp dir
+        Get-Process -Name 'python-installer' -ErrorAction 'SilentlyContinue' | Wait-Process -Timeout 900 -ErrorAction 'SilentlyContinue'
     }
 }
 
